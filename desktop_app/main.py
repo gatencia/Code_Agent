@@ -370,5 +370,69 @@ def main():
         stop_image_processor()
         sys.exit(0)
 
+
+# Updates to desktop_app/main.py
+
+# Add imports for UI components
+from desktop_app.ui.main_window import MainWindow
+
+# Add UI initialization in main() function:
+def main():
+    """Main entry point"""
+    args = parse_args()
+    
+    # Set logging level
+    if args.debug:
+        logging.getLogger().setLevel(logging.DEBUG)
+        logger.setLevel(logging.DEBUG)
+    
+    # Initialize components
+    init_components(args)
+    
+    # If test image is provided, run OCR test
+    if args.test_image:
+        if os.path.exists(args.test_image):
+            test_ocr_pipeline(
+                ocr_engine, 
+                image_processor, 
+                problem_parser, 
+                code_parser, 
+                solution_manager,
+                args.test_image,
+                save_processed=args.save_processed
+            )
+        else:
+            logger.error(f"Error: Test image not found: {args.test_image}")
+            return
+        
+        # If it's just a test, we're done
+        if args.test_image and not args.port:
+            return
+    
+    # Start the image processor thread with our callback
+    processor_thread = start_image_processor(process_image_callback)
+    
+    # Start the receiver server in a separate thread
+    server_thread = threading.Thread(target=start_receiver_server, args=(args.port,))
+    server_thread.daemon = True
+    server_thread.start()
+    
+    # Create and show the UI
+    app = QApplication(sys.argv)
+    window = MainWindow(solution_manager)
+    window.show()
+    
+    # Use a QTimer to keep the UI responsive while checking for signals
+    def check_exit():
+        if not server_thread.is_alive():
+            app.quit()
+    
+    exit_timer = QTimer()
+    exit_timer.timeout.connect(check_exit)
+    exit_timer.start(1000)  # Check every second
+    
+    # Start the UI event loop
+    sys.exit(app.exec_())
+
 if __name__ == "__main__":
     main()
